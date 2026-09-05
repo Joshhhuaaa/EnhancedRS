@@ -28,8 +28,8 @@ Field of view is calculated automatically based on the aspect ratio, widening th
 <div align="center">
   <table>
     <tr>
-      <td width="50%"><img style="width:100%" src=""></td>
-      <td width="50%"><img style="width:100%" src=""></td>
+      <td width="50%"><img style="width:100%" src="https://github.com/user-attachments/assets/bdba152b-a56b-431e-869a-88f493963f34"></td>
+      <td width="50%"><img style="width:100%" src="https://github.com/user-attachments/assets/ceef9a83-bcf7-4160-b072-74928bb3f543"></td>
     </tr>
     <tr>
       <td align="center">Stock</td>
@@ -40,6 +40,19 @@ Field of view is calculated automatically based on the aspect ratio, widening th
 
 ### Increased Character LOD Distance
 Significantly increases the distance at which higher detail character models are rendered, improving character quality at greater distances.
+
+<div align="center">
+  <table>
+    <tr>
+      <td width="50%"><img width="256" src="https://github.com/user-attachments/assets/794a57e0-df77-44cb-9032-e90ba4285c76"></td>
+      <td width="50%"><img width="256" src="https://github.com/user-attachments/assets/3249b8e6-8066-447c-be84-89552e653318"></td>
+    </tr>
+    <tr>
+      <td align="center">Stock</td>
+      <td align="center">Enhanced</td>
+    </tr>
+  </table>
+</div>
 
 ### Raw Input
 Mouse input is read directly, reducing overhead at high polling rates and helping prevent stuttering at extreme rates such as 8000 Hz. Adds support for Mouse 4 and 5 side buttons.
