@@ -61,9 +61,9 @@ Mouse input is read directly, reducing overhead at high polling rates and helpin
 Separate sensitivity multiplier for in-game aiming and the menu cursor to allow more control than the game's setting.
 
 ### Task Switching
-The original game does not support switching to other applications while playing. Enhanced RS adds support for <key>Alt</key> + <key>Tab</key> and other Windows application-switching shortcuts.
+The original game does not support switching to other applications while playing. Enhanced RS adds support for <kbd>Alt</kbd> + <kbd>Tab</kbd> and other Windows application-switching shortcuts.
 
-<key>Alt</key> + <key>F4</key> can also be used to exit the game.
+<kbd>Alt</kbd> + <kbd>F4</kbd> can also be used to exit the game.
 
 ### Portable Configuration
 The original game stores its settings in the Windows Registry and uses fixed installation paths. This makes settings difficult to transfer between installations and can cause the game to break when its directory is moved.
