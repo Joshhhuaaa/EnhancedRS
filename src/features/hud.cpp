@@ -21,6 +21,11 @@ namespace
     constexpr int       MissionState    = 5;
     constexpr int       NetMissionState = 6;
 
+    constexpr ptrdiff_t ViewWidth        = 0x08;
+    constexpr ptrdiff_t ViewHeight       = 0x0c;
+    constexpr ptrdiff_t ViewOwner        = 0x20;
+    constexpr ptrdiff_t OwnerRenderer    = 0xbc;
+    constexpr ptrdiff_t RendererRect     = 0x04;
     constexpr ptrdiff_t WidgetX          = 0x10;
     constexpr ptrdiff_t WidgetY          = 0x14;
     constexpr ptrdiff_t WidgetVisible    = 0x1c;
@@ -88,6 +93,7 @@ namespace
     SafetyHookMid    shDrawChildren{};
 
     int(__fastcall* BlitNoScale)(void*, void*, void*, int, int, int) = nullptr;
+    void(__fastcall* SetRenderRect)(void*, void*, int, int, int, int) = nullptr;
     void(__fastcall* DrawNetPanels)(void*, void*) = nullptr;
 
     template <typename Fn>
@@ -199,9 +205,26 @@ namespace
         DrawNetPanels(screen, nullptr);
     }
 
+    // Widen the 3D rect to the widget's aspect, removing side bars at wider resolutions
     void __fastcall UpdateRenderRect(uint8_t* view, void*)
     {
         shUpdateRenderRect.thiscall<void>(view);
+
+        uint8_t* owner = *reinterpret_cast<uint8_t**>(view + ViewOwner);
+        uint8_t* renderer = owner ? *reinterpret_cast<uint8_t**>(owner + OwnerRenderer) : nullptr;
+        const int widgetWidth  = *reinterpret_cast<int*>(view + ViewWidth);
+        const int widgetHeight = *reinterpret_cast<int*>(view + ViewHeight);
+        if (renderer && widgetHeight > 0)
+        {
+            int* rect = reinterpret_cast<int*>(renderer + RendererRect);
+            const int stock = rect[2] - rect[0];
+            const int wide = std::min((rect[3] - rect[1]) * widgetWidth / widgetHeight, widgetWidth);
+            if (wide > stock)
+            {
+                const int left = rect[0] - (wide - stock) / 2;
+                SetRenderRect(renderer, nullptr, left, rect[1], left + wide, rect[3]);
+            }
+        }
 
         // Null while the constructor runs, the constructor hook pins the bar itself.
         uint8_t* screen = ActionScreen();
@@ -280,13 +303,20 @@ FEATURE(Game, HudOverlay)
                                   "53 55 56 57 8B F1 FF 15 ? ? ? ? 8D 7E 50");
 
     auto renderRect = hook::pattern("53 55 56 57 8B F9 B8 B7 60 0B B6 8B 5F 2C 8B 77 08");
+    auto setRect    = hook::pattern("53 8B 54 24 08 56 8B F1 57 8D 46 04 8B C8 89 11 8B 54 24 14 "
+                                    "89 51 04 8B 54 24 18 89 51 08 8B 54 24 1C 89 51 0C");
     auto blit = hook::pattern("56 57 8B 73 04 85 F6 0F 84 ? ? ? ? 8B 94 24 84 00 00 00 "
                               "8B 8C 24 88 00 00 00 8B 82 8C 00 00 00");
+
+    // Replace fullscreen/strip controls with render size +/- controls
+    auto grow      = hook::pattern("8B 15 ? ? ? ? 8B 4E 28 8B AE DC 01 00 00 8B 52 04 8B 41 2C "
+                                   "8B 7A 18 8B DF 2B DD 3B C3 0F 85");
+    auto shrink    = hook::pattern("A1 ? ? ? ? 8B 4E 28 8B 50 04 8B 79 2C 8B 42 18 3B F8 0F 85");
 
     auto netPanels = hook::pattern("81 EC E0 02 00 00 53 55 8B E9 56 57 8A 85 F3 01 00 00 84 C0 75 0A");
     auto fullMap = hook::pattern("53 56 8B F1 57 8A 86 F0 01 00 00 84 C0 0F 84 ? ? ? ? 8A 86 F3 01 00 00");
     if (ctor.empty() || draw.empty() || viewDraw.empty() || renderRect.empty() || blit.empty() ||
-        netPanels.empty() || fullMap.empty())
+        netPanels.empty() || fullMap.empty() || setRect.empty() || grow.empty() || shrink.empty())
     {
         spdlog::error("Hud: action screen code not found");
         return;
@@ -298,12 +328,17 @@ FEATURE(Game, HudOverlay)
     shToggleFullMap    = Memory::Hook(fullMap.get_first(), ToggleFullMap);
     shDrawChildren     = Memory::MidHook(draw.get_first(10), InvalidateChildren);
     BlitNoScale        = reinterpret_cast<decltype(BlitNoScale)>(blit.get_first(-6));
+    SetRenderRect      = reinterpret_cast<decltype(SetRenderRect)>(setRect.get_first());
     DrawNetPanels      = reinterpret_cast<decltype(DrawNetPanels)>(netPanels.get_first(-21));
     if (!shActionScreenCtor || !shViewDraw || !shUpdateRenderRect || !shToggleFullMap || !shDrawChildren)
     {
         spdlog::error("Hud: hook installation failed");
         return;
     }
+
+    // Turn each JNZ into a JMP without changing its rel32 displacement.
+    injector::WriteMemory<uint16_t>(grow.get_first(30), 0xe990, true);
+    injector::WriteMemory<uint16_t>(shrink.get_first(19), 0xe990, true);
 
     for (auto& constant : ReticleConstants)
     {
