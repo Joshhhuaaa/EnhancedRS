@@ -120,12 +120,10 @@ namespace
 
         const int width  = *reinterpret_cast<int*>(display + CurrentWidth);
         const int height = *reinterpret_cast<int*>(display + CurrentHeight);
-        if (height <= DesignHeight)
-            return false;
 
-        factor  = static_cast<float>(height) / DesignHeight;
+        factor  = height > DesignHeight ? static_cast<float>(height) / DesignHeight : 1.0f;
         originX = static_cast<int>((width - DesignWidth * factor) * 0.5f);
-        return true;
+        return factor > 1.0f || originX > 0;
     }
 
     // Shell draws end at IDirectDrawSurface::Blt with the destination rect in screen pixels.
