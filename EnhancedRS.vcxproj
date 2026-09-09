@@ -67,6 +67,7 @@
     <ClCompile Include="src\features\local_address.cpp" />
     <ClCompile Include="src\features\menu.cpp" />
     <ClCompile Include="src\features\mouse_buttons.cpp" />
+    <ClCompile Include="src\features\movie.cpp" />
     <ClCompile Include="src\features\resolution.cpp" />
     <ClCompile Include="src\features\sherman_ini.cpp" />
     <ClCompile Include="src\features\skip_intro.cpp" />
