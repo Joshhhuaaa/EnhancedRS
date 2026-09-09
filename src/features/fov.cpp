@@ -1,6 +1,9 @@
 #include "stdafx.h"
 #include "common.hpp"
+#include "config.hpp"
 #include "feature.hpp"
+
+static Config::Float fFieldOfView("Graphics", "FieldOfView", 1.0f);
 
 namespace
 {
@@ -15,9 +18,13 @@ namespace
     constexpr float ReferenceAspect = 4.0f / 3.0f;
     constexpr float Degrees = 57.2957795f;
 
+    constexpr float StockSetting = 0.0f;
+    constexpr float AutoSetting  = 1.0f;
+
     SafetyHookInline shApplyCamera{};
 
     float lastLogged = 0.0f;
+    float baseFov = 0.0f;
 
     // The engine keeps the horizontal fixed and derives the vertical by dividing by aspect, so the
     // view loses height as the display widens. Scaling the horizontal against a 4:3 viewport of the
@@ -28,31 +35,47 @@ namespace
         float* fov = reinterpret_cast<float*>(camera + CameraFOV);
         const float stock = *fov;
         float corrected = stock;
+        float ratio = 1.0f;
 
-        uint8_t* app = *reinterpret_cast<uint8_t**>(AppObject);
-        uint8_t* display = app ? *reinterpret_cast<uint8_t**>(app + 4) : nullptr;
-        uint8_t* viewport = *reinterpret_cast<uint8_t**>(camera + CameraViewport);
+        if (baseFov == 0.0f)
+            baseFov = stock;
 
-        if (display && viewport)
+        if (fFieldOfView == AutoSetting)
         {
-            const int height = *reinterpret_cast<int*>(display + DisplayHeight);
-            const float width = static_cast<float>(*reinterpret_cast<int*>(viewport + ViewportWidth));
-            const float ratio = height > 0 ? width / (static_cast<float>(height) * ReferenceAspect) : 1.0f;
+            uint8_t* app = *reinterpret_cast<uint8_t**>(AppObject);
+            uint8_t* display = app ? *reinterpret_cast<uint8_t**>(app + 4) : nullptr;
+            uint8_t* viewport = *reinterpret_cast<uint8_t**>(camera + CameraViewport);
 
-            if (ratio > 1.0f)
+            if (display && viewport)
             {
-                corrected = 2.0f * std::atan(std::tan(stock * 0.5f) * ratio);
-                *fov = corrected;
+                const int height = *reinterpret_cast<int*>(display + DisplayHeight);
+                const float width = static_cast<float>(*reinterpret_cast<int*>(viewport + ViewportWidth));
+                if (height > 0)
+                    ratio = width / (static_cast<float>(height) * ReferenceAspect);
+            }
 
-                // Once: the value now changes every frame of a zoom animation.
-                if (lastLogged == 0.0f)
-                {
-                    const float aspect = *reinterpret_cast<float*>(camera + CameraAspect);
-                    spdlog::info("FOV: horizontal {:.2f} -> {:.2f} deg, vertical {:.2f} deg",
-                                 stock * Degrees, *fov * Degrees,
-                                 2.0f * std::atan(std::tan(*fov * 0.5f) / aspect) * Degrees);
-                    lastLogged = *fov;
-                }
+            if (ratio < 1.0f)
+                ratio = 1.0f;
+        }
+        else
+        {
+            // Keep zoom behavior proportional to the original FOV
+            ratio = std::tan(fFieldOfView / Degrees * 0.5f) / std::tan(baseFov * 0.5f);
+        }
+
+        if (ratio != 1.0f)
+        {
+            corrected = 2.0f * std::atan(std::tan(stock * 0.5f) * ratio);
+            *fov = corrected;
+
+            // Log the initial FOV values before zoom changes them
+            if (lastLogged == 0.0f)
+            {
+                const float aspect = *reinterpret_cast<float*>(camera + CameraAspect);
+                spdlog::info("FOV: horizontal {:.2f} -> {:.2f} deg, vertical {:.2f} deg",
+                             stock * Degrees, *fov * Degrees,
+                             2.0f * std::atan(std::tan(*fov * 0.5f) / aspect) * Degrees);
+                lastLogged = *fov;
             }
         }
 
@@ -68,6 +91,9 @@ namespace
 
 FEATURE(Game, FOVCorrection)
 {
+    if (fFieldOfView == StockSetting)
+        return;
+
     // Per-frame camera apply: SetViewport / SetFOV / SetAspect / SetNear / SetFar.
     auto apply = hook::pattern("56 8B F1 B9 ? ? ? ? 8B 86 90 00 00 00 50 E8 ? ? ? ? "
                                "D9 86 B4 00 00 00");
@@ -79,5 +105,13 @@ FEATURE(Game, FOVCorrection)
 
     shApplyCamera = Memory::Hook(apply.get_first(), ApplyCamera);
     if (!shApplyCamera)
+    {
         spdlog::error("FOV: hook installation failed");
+        return;
+    }
+
+    if (fFieldOfView == AutoSetting)
+        spdlog::info("FOV: automatically corrected for the display aspect ratio");
+    else
+        spdlog::info("FOV: forced to {:.1f} deg horizontal", static_cast<float>(fFieldOfView));
 }
